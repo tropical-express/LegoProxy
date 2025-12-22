@@ -1,7 +1,7 @@
 from dotenv import load_dotenv
 load_dotenv(".env")
 
-from fastapi import FastAPI, Request, Body, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Request, Body, WebSocket, WebSocketDisconnect, Response
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 
 from uvicorn import run
@@ -287,13 +287,21 @@ async def serverStats():
 
 @app.get("/{api}.roblox.com/{endpoint:path}")
 @app.post("/{api}.roblox.com/{endpoint:path}")
-async def requestProxy(request: Request, api: str, endpoint: str, data: dict = Body({})):
+async def requestProxy(request: Request, api: str, endpoint: str):
     startTime = time()
     proxyConfig = config()
     api = api.lower()
     ip, id = request.headers.get("X-Forwarded-For"), request.headers.get("Roblox-Id")
 
-    cacheKey = f"{ip}:{id}:{api}.roblox.com/{endpoint}?{request.query_params}"
+    body = await request.body()
+    try:
+        json_body = await request.json()
+    except JSONDecodeError:
+        json_body = None
+    except Exception:
+        json_body = None
+
+    cacheKey = f"{ip}:{id}:{request.method}:{api}.roblox.com/{endpoint}?{request.query_params}:{body}"
     cachedResponse = cache.get(cacheKey)
 
     proxyConfig["analytics"]["requests"][0] += 1
@@ -303,14 +311,12 @@ async def requestProxy(request: Request, api: str, endpoint: str, data: dict = B
         responseTime.append(endTime - startTime)
         proxyConfig["analytics"]["requests"][2] += 1
 
-        #with open("./core/config.json", "w+") as file:
-        #    dump(proxyConfig, file, indent=4)
-
-        #if not cachedResponse.get("success"):
-        #    proxyConfig["analytics"]["requests"][1] += 1
-
         Logging.requestLog([request.method, ip, id, 1, request.url.path, request.query_params])
-        return cachedResponse
+        return JSONResponse(
+            content=cachedResponse["content"],
+            status_code=cachedResponse["status"],
+            headers=cachedResponse["headers"]
+        )
     
     password = request.headers.get("ProxyPassword")
 
@@ -353,10 +359,10 @@ async def requestProxy(request: Request, api: str, endpoint: str, data: dict = B
                 "api": api,
                 "endpoint": endpoint,
                 "query": f"{request.query_params}",
-                "data": data,
+                "data": json_body if isinstance(json_body, dict) else {},
                 "_id": req_id
             }
-            
+
             response = await relayRequest("HTTP", req_id, jsonData)
 
             endTime = time()
@@ -367,39 +373,78 @@ async def requestProxy(request: Request, api: str, endpoint: str, data: dict = B
         else:
             async with AsyncClient() as cli:
                 params = request.query_params or None
-                json_data = data if request.method != "GET" else None
+                headers = {
+                    key: value for key, value in request.headers.items()
+                    if key.lower() not in {"host", "content-length", "accept-encoding", "connection"}
+                }
+                content = None if request.method == "GET" else (body or None)
 
                 req = cli.build_request(
                     request.method,
                     f"https://{api}.roblox.com/{endpoint}",
                     params=params,
-                    json=json_data
+                    content=content,
+                    headers=headers
                 )
 
                 res = await cli.send(req)
-                response = res.json()
 
-    except JSONDecodeError: 
+                filtered_headers = {
+                    key: value for key, value in res.headers.items()
+                    if key.lower() not in {"content-length", "connection", "transfer-encoding", "content-encoding"}
+                }
+
+                if "application/json" in res.headers.get("content-type", "").lower():
+                    response = {
+                        "content": res.json(),
+                        "status": res.status_code,
+                        "headers": filtered_headers
+                    }
+                else:
+                    endTime = time()
+                    responseTime.append(endTime - startTime)
+                    if len(responseTime) > sets: responseTime.pop(0)
+
+                    return Response(
+                        content=res.content,
+                        status_code=res.status_code,
+                        media_type=res.headers.get("content-type"),
+                        headers=filtered_headers
+                    )
+
+    except JSONDecodeError:
         Logging.requestLog([request.method, ip, id, 2, request.url.path, request.query_params])
         response = {
-            "success": False,
-            "message": f"The LegoProxy Server did not get a JSON Response from {api}.roblox.com"
+            "content": {
+                "success": False,
+                "message": f"The LegoProxy Server did not get a JSON Response from {api}.roblox.com"
+            },
+            "status": 502,
+            "headers": {}
         }
         proxyConfig["analytics"]["requests"][1] += 1
 
-    except ConnectError: 
+    except ConnectError:
         Logging.requestLog([request.method, ip, id, 2, request.url.path, request.query_params])
         response = {
-            "success": False,
-            "message": f"The LegoProxy Server could not connect to {api}.roblox.com"
+            "content": {
+                "success": False,
+                "message": f"The LegoProxy Server could not connect to {api}.roblox.com"
+            },
+            "status": 503,
+            "headers": {}
         }
         proxyConfig["analytics"]["requests"][1] += 1
 
     except RequestError:
         Logging.requestLog([request.method, ip, id, 2, request.url.path, request.query_params])
         response = {
-            "success": False,
-            "message": f"The LegoProxy Server could not send a request to {api}.roblox.com"
+            "content": {
+                "success": False,
+                "message": f"The LegoProxy Server could not send a request to {api}.roblox.com"
+            },
+            "status": 502,
+            "headers": {}
         }
         proxyConfig["analytics"]["requests"][1] += 1
 
@@ -410,9 +455,15 @@ async def requestProxy(request: Request, api: str, endpoint: str, data: dict = B
 
     if len(responseTime) > sets: responseTime.pop(0)
     
-    if config()["config"]["caching"]["ttl"] != 0: cache[cacheKey] = response
+    if config()["config"]["caching"]["ttl"] != 0 and isinstance(response, dict):
+        cache[cacheKey] = response
+
     Logging.requestLog([request.method, ip, id, 1, request.url.path, request.query_params])
-    return response
+    return JSONResponse(
+        content=response.get("content", {}),
+        status_code=response.get("status", 200),
+        headers=response.get("headers", {})
+    )
 
 @app.post("/webhook")
 async def requestProxy(data: dict = Body({})):
