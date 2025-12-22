@@ -366,10 +366,15 @@ async def requestProxy(request: Request, api: str, endpoint: str, data: dict = B
 
         else:
             async with AsyncClient() as cli:
-                if request.query_params == None:
-                    req = cli.build_request(request.method, f"https://{api}.roblox.com/{endpoint}", json=data)
-                else:
-                    req = cli.build_request(request.method, f"https://{api}.roblox.com/{endpoint}?{request.query_params}", json=data)
+                params = request.query_params or None
+                json_data = data if request.method != "GET" else None
+
+                req = cli.build_request(
+                    request.method,
+                    f"https://{api}.roblox.com/{endpoint}",
+                    params=params,
+                    json=json_data
+                )
 
                 res = await cli.send(req)
                 response = res.json()
