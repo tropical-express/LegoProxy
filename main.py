@@ -78,6 +78,33 @@ cache = TTLCache(
     ttl=config()["config"]["caching"]["ttl"]
 )
 
+search_client: AsyncClient | None = None
+proxy_client: AsyncClient | None = None
+
+
+@app.on_event("startup")
+async def startup_event():
+    global search_client, proxy_client
+
+    if search_client is None:
+        search_client = AsyncClient(http2=True, timeout=10)
+
+    if proxy_client is None:
+        proxy_client = AsyncClient(http2=True, timeout=None)
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    global search_client, proxy_client
+
+    clients = [search_client, proxy_client]
+    for client in clients:
+        if client is not None:
+            await client.aclose()
+
+    search_client = None
+    proxy_client = None
+
 @app.middleware("http")
 async def rateLimiter(request: Request, callNext):
     ip, id = request.headers.get("X-Forwarded-For"), request.headers.get("Roblox-Id")
@@ -288,11 +315,21 @@ async def search_game(query: str):
             status_code=400
         )
 
-    async with AsyncClient() as cli:
-        res = await cli.get(
+    client = search_client
+    close_client = False
+
+    if client is None:
+        client = AsyncClient(http2=True, timeout=10)
+        close_client = True
+
+    try:
+        res = await client.get(
             "https://games.roblox.com/v1/games/list",
             params={"keyword": query, "limit": 1, "sortOrder": "Asc"},
         )
+    finally:
+        if close_client:
+            await client.aclose()
 
     if res.status_code != 200:
         return JSONResponse(
@@ -411,7 +448,14 @@ async def requestProxy(request: Request, api: str, endpoint: str):
             return RedirectResponse(f"/relay/response/{response}")
 
         else:
-            async with AsyncClient() as cli:
+            client = proxy_client
+            close_client = False
+
+            if client is None:
+                client = AsyncClient(http2=True, timeout=None)
+                close_client = True
+
+            try:
                 params = request.query_params or None
                 headers = {
                     key: value for key, value in request.headers.items()
@@ -419,7 +463,7 @@ async def requestProxy(request: Request, api: str, endpoint: str):
                 }
                 content = None if request.method == "GET" else (body or None)
 
-                req = cli.build_request(
+                req = client.build_request(
                     request.method,
                     f"https://{api}.roblox.com/{endpoint}",
                     params=params,
@@ -427,7 +471,7 @@ async def requestProxy(request: Request, api: str, endpoint: str):
                     headers=headers
                 )
 
-                res = await cli.send(req)
+                res = await client.send(req)
 
                 filtered_headers = {
                     key: value for key, value in res.headers.items()
@@ -451,6 +495,9 @@ async def requestProxy(request: Request, api: str, endpoint: str):
                         media_type=res.headers.get("content-type"),
                         headers=filtered_headers
                     )
+            finally:
+                if close_client:
+                    await client.aclose()
 
     except JSONDecodeError:
         Logging.requestLog([request.method, ip, id, 2, request.url.path, request.query_params])
