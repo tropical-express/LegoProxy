@@ -29,14 +29,9 @@
             transition: 500ms
         }
         
-        @font-face {
-            font-family: 'Comic Neue Angular';
-            src: url('https://cdn.glitch.global/2c158a50-1e93-455c-b595-19267bda693b/ComicNeueAngular.woff') format('woff');
-        }
-
         text {
             color: white;
-            font-family: "Comic Neue Angular"
+            font-family: "Inter", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
         }
 
         @keyframes pulse {
@@ -50,7 +45,7 @@
 
         a {
             display: inline-block;
-            font-family: 'Comic Neue Angular';
+            font-family: "Inter", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
             color: white;
             background-color: transparent;
             text-decoration: none;
@@ -58,31 +53,97 @@
         }
 
         a:link {
-            font-family: 'Comic Neue Angular';
+            font-family: "Inter", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
             color: white;
             background-color: transparent;
             text-decoration: none;
         }
 
         a:visited {
-            font-family: 'Comic Neue Angular';
+            font-family: "Inter", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
             color: white;
             background-color: transparent;
             text-decoration: none;
         }
 
         a:hover {
-            font-family: 'Comic Neue Angular';
+            font-family: "Inter", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
             color: #999;
             background-color: transparent;
             text-decoration: none;
         }
 
         a:active {
-            font-family: 'Comic Neue Angular';
+            font-family: "Inter", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
             color: white;
             background-color: transparent;
             text-decoration: none;
+        }
+
+        .search-container {
+            margin-top: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .search-container label {
+            font-size: 16px;
+            color: #b3b3b3;
+            font-family: "Inter", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+        }
+
+        .search-row {
+            display: flex;
+            gap: 10px;
+        }
+
+        .search-input {
+            padding: 12px 14px;
+            border-radius: 10px;
+            border: 2px solid #222;
+            background-color: #1a1a1a;
+            color: #fff;
+            font-size: 16px;
+            width: 320px;
+            outline: none;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+            font-family: "Inter", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+        }
+
+        .search-input:focus {
+            border-color: #75b2eb;
+            box-shadow: 0 0 0 3px rgba(117, 178, 235, 0.25);
+        }
+
+        .search-button {
+            padding: 12px 16px;
+            border-radius: 10px;
+            border: none;
+            background: linear-gradient(135deg, #75b2eb, #87d997);
+            color: #0b1725;
+            font-weight: 700;
+            font-size: 15px;
+            cursor: pointer;
+            transition: transform 0.15s ease, box-shadow 0.15s ease;
+            font-family: "Inter", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+        }
+
+        .search-button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+        }
+
+        .search-button:active {
+            transform: translateY(0);
+            box-shadow: 0 3px 10px rgba(0, 0, 0, 0.35);
+        }
+
+        .search-feedback {
+            min-height: 18px;
+            font-size: 14px;
+            color: #9fd1ff;
+            font-family: "Inter", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
         }
     </style>
 </head>
@@ -98,6 +159,16 @@
             <text style="font-size: 18px;">with <text id="relays">0</text> Relay Clients connected to the Relay Server (<text id="relayState">...</text>)</text><br>
             <text style="font-size: 18px;">and has an Avg. Process Time of <text id="averageProcessTime">0</text>ms (Last: <text id="lastProcessTime">0</text>ms)</text><br>
             <text style="font-size: 12px;">Github Project: <a style="font-size: 12px;" href="https://github.com/nyxical420/LegoProxy">https://github.com/nyxical420/LegoProxy</a></text><br>
+            <div class="search-container">
+                <label for="gameSearch">Jump straight to a Roblox game</label>
+                <form id="gameSearchForm" action="/search" method="get">
+                    <div class="search-row">
+                        <input id="gameSearch" name="query" class="search-input" type="text" placeholder="Search for a Roblox game and press Enter" required autocomplete="off">
+                        <button class="search-button" type="submit">Search</button>
+                    </div>
+                    <div id="searchFeedback" class="search-feedback"></div>
+                </form>
+            </div>
         </div>
     </div>
 
@@ -164,6 +235,22 @@
                     console.error('Error fetching data:', error);
                 });
         }
+
+        const searchForm = document.getElementById('gameSearchForm');
+        const searchInput = document.getElementById('gameSearch');
+        const searchFeedback = document.getElementById('searchFeedback');
+
+        searchForm.addEventListener('submit', (event) => {
+            const query = searchInput.value.trim();
+
+            if (!query) {
+                event.preventDefault();
+                searchFeedback.textContent = 'Please type a game name before searching.';
+                return;
+            }
+
+            searchFeedback.textContent = 'Finding your game...';
+        });
 
         window.setInterval(updateStats, 5000);
         updateStats();
