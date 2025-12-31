@@ -269,7 +269,7 @@ async def serverStats():
         average = total / len(responseTime)
     except ZeroDivisionError:
         average = 0
-    
+
     return {
         "requests": config()["analytics"]["requests"],
         "averageProcTime": round(average * 1000),
@@ -278,6 +278,46 @@ async def serverStats():
         "relayEnabled": config()["relay_config"]["use_relay"],
         "relaysFree": len(await getFreeRelayClients())
     }
+
+
+@app.get("/search")
+async def search_game(query: str):
+    if not query.strip():
+        return JSONResponse(
+            content={"success": False, "message": "Please enter a game name to search."},
+            status_code=400
+        )
+
+    async with AsyncClient() as cli:
+        res = await cli.get(
+            "https://games.roblox.com/v1/games/list",
+            params={"keyword": query, "limit": 1, "sortOrder": "Asc"},
+        )
+
+    if res.status_code != 200:
+        return JSONResponse(
+            content={"success": False, "message": "Unable to search for games right now."},
+            status_code=502
+        )
+
+    matches = res.json().get("data", [])
+
+    if not matches:
+        return JSONResponse(
+            content={"success": False, "message": "No games matched your search."},
+            status_code=404
+        )
+
+    game = matches[0]
+    place_id = game.get("placeId") or game.get("id")
+
+    if not place_id:
+        return JSONResponse(
+            content={"success": False, "message": "No valid game result found."},
+            status_code=500
+        )
+
+    return RedirectResponse(f"https://www.roblox.com/games/{place_id}")
 
 
 @app.get("/{api}/{endpoint:path}")

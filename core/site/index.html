@@ -84,6 +84,37 @@
             background-color: transparent;
             text-decoration: none;
         }
+
+        .search-container {
+            margin-top: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .search-container label {
+            font-size: 16px;
+            color: #b3b3b3;
+            font-family: 'Comic Neue Angular';
+        }
+
+        .search-input {
+            padding: 12px 14px;
+            border-radius: 10px;
+            border: 2px solid #222;
+            background-color: #1a1a1a;
+            color: #fff;
+            font-size: 16px;
+            width: 320px;
+            outline: none;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+            font-family: 'Comic Neue Angular';
+        }
+
+        .search-input:focus {
+            border-color: #75b2eb;
+            box-shadow: 0 0 0 3px rgba(117, 178, 235, 0.25);
+        }
     </style>
 </head>
 <body>
@@ -98,6 +129,12 @@
             <text style="font-size: 18px;">with <text id="relays">0</text> Relay Clients connected to the Relay Server (<text id="relayState">...</text>)</text><br>
             <text style="font-size: 18px;">and has an Avg. Process Time of <text id="averageProcessTime">0</text>ms (Last: <text id="lastProcessTime">0</text>ms)</text><br>
             <text style="font-size: 12px;">Github Project: <a style="font-size: 12px;" href="https://github.com/nyxical420/LegoProxy">https://github.com/nyxical420/LegoProxy</a></text><br>
+            <div class="search-container">
+                <label for="gameSearch">Jump straight to a Roblox game</label>
+                <form id="gameSearchForm" action="/search" method="get">
+                    <input id="gameSearch" name="query" class="search-input" type="text" placeholder="Search for a Roblox game and press Enter" required>
+                </form>
+            </div>
         </div>
     </div>
 
